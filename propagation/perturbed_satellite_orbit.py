@@ -8,7 +8,7 @@ Copyright (c) 2010-2022, Delft University of Technology. All rights reserved. Th
 """
 This example demonstrates the propagation of a (quasi-massless) body dominated by a central point-mass attractor, but also including multiple perturbing accelerations exerted by the central body as well as third bodies.
 
-The example showcases the ease with which a simulation environment can be extended to a multi-body system. It also demonstrates the wide variety of acceleration types that can be modelled using the propagation_setup.acceleration module, including accelerations from non-conservative forces such as drag and radiation pressure. Note that the modelling of these acceleration types requires special environment interfaces (implemented via `add_aerodynamic_coefficient_interface()`, `add_radiation_pressure_interface()`) of the body undergoing the accelerations.
+The example showcases the ease with which a simulation environment can be extended to a multi-body system. It also demonstrates the wide variety of acceleration types that can be modelled using the propagation_setup.acceleration module, including accelerations from non-conservative forces such as drag and radiation pressure. Note that the modelling of these acceleration types requires special settings (implemented via `aerodynamic_coefficient_settings`, `radiation_pressure_target_settings`) of the body undergoing the accelerations.
 
 It also demonstrates and motivates the usage of dependent variables. By keeping track of such variables throughout the propagation, valuable insight, such as contributions of individual acceleration types, ground tracks or the evolution of Kepler elements, can be derived in the post-propagation analysis.
 """
@@ -42,17 +42,10 @@ from tudatpy.astro.time_conversion import DateTime
 ## Configuration
 """
 NAIF's `SPICE` kernels are first loaded, so that the position of various bodies such as the Earth can be make known to `tudatpy`.
-
-Then, the start and end simulation epochs are setups. In this case, the start epoch is set to `0`, corresponding to the 1st of January 2000. The times should be specified in seconds since J2000.
-Please refer to the API documentation of the `time_conversion module` [here](https://tudatpy.readthedocs.io/en/latest/time_conversion.html) for more information on this.
 """
 
 # Load spice kernels
 spice.load_standard_kernels()
-
-# Set simulation start and end epochs
-simulation_start_epoch = DateTime(2000, 1, 1).epoch()
-simulation_end_epoch   = DateTime(2000, 1, 2).epoch()
 
 
 ## Environment setup
@@ -67,7 +60,7 @@ Bodies can be created by making a list of strings with the bodies that is to be 
 
 The default body settings (such as atmosphere, body shape, rotation model) are taken from `SPICE`.
 
-These settings can be adjusted. Please refer to the [Available Environment Models](https://tudat-space.readthedocs.io/en/latest/_src_user_guide/state_propagation/environment_setup/create_models/available.html#available-environment-models) in the user guide for more details.
+These settings can be adjusted. Please refer to the [Available Environment Models](https://docs.tudat.space/en/latest/_src_user_guide/state_propagation/environment_setup/environment_models.html) in the user guide for more details.
 """
 
 # Define string names for bodies to be created from default.
@@ -197,20 +190,26 @@ acceleration_models = propagation_setup.create_acceleration_models(
 
 ### Define the initial state
 """
-The initial state of the vehicle that will be propagated is now defined. 
-
+The initial state of the vehicle that will be propagated is now defined.
 This initial state always has to be provided as a cartesian state, in the form of a list with the first three elements representing the initial position, and the three remaining elements representing the initial velocity.
-
 Within this example, we will retrieve the initial state of Delfi-C3 using its Two-Line-Elements (TLE) the date of its launch (April the 28th, 2008). The TLE strings are obtained from [space-track.org](https://www.space-track.org).
+
+The initial state of the vehicle is defined at a specific epoch.
+As TLEs are only valid close to their epoch, we will extract the epoch for the simulation start from the TLE element.
+The initial state will be propagated for one day, which we set relative to the initial epoch.
 """
 
 # Retrieve the initial state of Delfi-C3 using Two-Line-Elements (TLEs)
 delfi_tle = environment.Tle(
     "1 32789U 07021G   08119.60740078 -.00000054  00000-0  00000+0 0  9999",
-    "2 32789 098.0082 179.6267 0015321 307.2977 051.0656 14.81417433    68"
+    "2 32789 098.0082 179.6267 0015321 307.2977 051.0656 14.81417433    68",
 )
-delfi_ephemeris = environment.TleEphemeris( "Earth", "J2000", delfi_tle, False )
-initial_state = delfi_ephemeris.cartesian_state( simulation_start_epoch )
+delfi_ephemeris = environment.TleEphemeris("Earth", "J2000", delfi_tle, False)
+
+simulation_start_epoch = delfi_tle.get_epoch()
+simulation_end_epoch = simulation_start_epoch + 1 * constants.JULIAN_DAY
+
+initial_state = delfi_ephemeris.cartesian_state(simulation_start_epoch)
 
 
 ### Define dependent variables to save
@@ -323,12 +322,12 @@ Let's first plot the total acceleration on the satellite over time. This can be 
 """
 
 # Plot total acceleration as function of time
-time_hours = dep_vars_array[:,0]/3600
+time_hours = (dep_vars_array[:,0]-dep_vars_array[0,0])/3600
 total_acceleration_norm = np.linalg.norm(dep_vars_array[:,1:4], axis=1)
 plt.figure(figsize=(9, 5))
 plt.title("Total acceleration norm on Delfi-C3 over the course of propagation.")
 plt.plot(time_hours, total_acceleration_norm)
-plt.xlabel('Time [hr]')
+plt.xlabel('Relative Time [hr]')
 plt.ylabel('Total Acceleration [m/s$^2$]')
 plt.xlim([min(time_hours), max(time_hours)])
 plt.grid()
@@ -400,7 +399,7 @@ ax6.set_ylabel('True Anomaly [deg]')
 ax6.set_yticks(np.arange(0, 361, step=60))
 
 for ax in fig.get_axes():
-    ax.set_xlabel('Time [hr]')
+    ax.set_xlabel('Relative Time [hr]')
     ax.set_xlim([min(time_hours), max(time_hours)])
     ax.grid()
 plt.tight_layout()
@@ -442,7 +441,7 @@ acceleration_norm_rp_sun = dep_vars_array[:,18]
 plt.plot(time_hours, acceleration_norm_rp_sun, label='Radiation Pressure Sun')
 
 plt.xlim([min(time_hours), max(time_hours)])
-plt.xlabel('Time [hr]')
+plt.xlabel('Relative Time [hr]')
 plt.ylabel('Acceleration Norm [m/s$^2$]')
 
 plt.legend(bbox_to_anchor=(1.005, 1))

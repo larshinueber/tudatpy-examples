@@ -1,4 +1,4 @@
-# Linear sensitivity analysis of perturbed orbit
+# Linear sensitivity analysis using variational equations
 """
 Copyright (c) 2010-2022, Delft University of Technology. All rights reserved. This file is part of the Tudat. Redistribution and use in source and binary forms, with or without modification, are permitted exclusively under the terms of the Modified BSD license. You should have received a copy of the license with this file. If not, please or visit: http://tudat.tudelft.nl/LICENSE.
 
@@ -10,10 +10,10 @@ This example is an extension of the Perturbed Satellite Orbit Application. It ad
 
 The script demonstrates how the basic numerical simulation setup (aiming to propagate the state of the system) can swiftly be extended to enable a study of the system's sensitivity.
 
-Via the `estimation_setup.parameter module`, the system parameters w.r.t. which the sensitivity is to be studied are defined and a `create_variational_equations_solver` function from the numerical_simulation module is used in order to setup and integrate the system's variational equations. After obtaining the state transition matrices from the integrated variational equations, the system's response to small perturbations can be tested via simple matrix multiplication.
+Via the `estimation_setup.parameter` module, the system parameters w.r.t. which the sensitivity is to be studied are defined and a `create_variational_equations_solver` function from the numerical_simulation module is used in order to setup and integrate the system's variational equations. After obtaining the state transition matrices from the integrated variational equations, the system's response to small perturbations can be tested via simple matrix multiplication.
 
 
-The availability of variational equations in tudat enables many more, advanced functionalities, such as covariance analysis and precise orbit determination.
+The availability of variational equations in Tudat enables many more, advanced functionalities, such as covariance analysis and precise orbit determination.
 """
 
 ## Import statements
@@ -34,7 +34,7 @@ from tudatpy.interface import spice
 from tudatpy import numerical_simulation
 from tudatpy.numerical_simulation import environment
 from tudatpy.numerical_simulation import environment_setup, propagation_setup, estimation_setup
-from tudatpy.astro import element_conversion
+from tudatpy.astro import element_conversion, time_conversion
 from tudatpy import constants
 from tudatpy.util import result2array
 from tudatpy.astro.time_conversion import DateTime
@@ -43,17 +43,10 @@ from tudatpy.astro.time_conversion import DateTime
 ## Configuration
 """
 NAIF's `SPICE` kernels are first loaded, so that the position of various bodies such as the Earth, the Sun, the Moon, Venus, or Mars, can be make known to `tudatpy`.
-
-Then, the start and end simulation epochs are setups. In this case, the start epoch is set to `0`, corresponding to the 1st of January 2000. The times should be specified in seconds since J2000.
-Please refer to the API documentation of the `time_conversion module` [here](https://tudatpy.readthedocs.io/en/latest/time_conversion.html) for more information on this.
 """
 
 # Load spice kernels
 spice.load_standard_kernels()
-
-# Set simulation start and end epochs
-simulation_start_epoch = DateTime(2000, 1, 1).epoch()
-simulation_end_epoch   = DateTime(2000, 1, 2).epoch()
 
 
 ## Environment setup
@@ -68,7 +61,7 @@ Bodies can be created by making a list of strings with the bodies that is to be 
 
 The default body settings (such as atmosphere, body shape, rotation model) are taken from `SPICE`.
 
-These settings can be adjusted. Please refer to the [Available Environment Models](https://tudat-space.readthedocs.io/en/latest/_src_user_guide/state_propagation/environment_setup/create_models/available.html#available-environment-models) in the user guide for more details.
+These settings can be adjusted. Please refer to the [Available Environment Models](https://docs.tudat.space/en/latest/_src_user_guide/state_propagation/environment_setup/environment_models.html) in the user guide for more details.
 """
 
 # Create default body settings for "Sun", "Earth", "Moon", "Mars", "Venus"
@@ -85,7 +78,7 @@ body_settings = environment_setup.get_default_body_settings(
 """
 Let's now create the satellite for which an orbit will be simulated.
 
-This satellite is setup to have mass of 400kg, a reference area (used both for aerodynamic and radiation pressure) of 4m$^2$, a radiation pressure coefficient of 1.2, and a drag coefficient also of 1.2.
+This satellite is setup to have mass of 2.2kg, a reference area (used both for aerodynamic and radiation pressure) of 4m$^2$, a radiation pressure coefficient of 1.2, and a drag coefficient also of 1.2.
 
 When setting up the radiation pressure interface, the Earth is set as a body that can occult the radiation emitted by the Sun.
 """
@@ -93,7 +86,7 @@ When setting up the radiation pressure interface, the Earth is set as a body tha
 # Create empty body settings for the satellite
 body_settings.add_empty_settings("Delfi-C3")
 
-body_settings.get("Delfi-C3").constant_mass = 400
+body_settings.get("Delfi-C3").constant_mass = 2.2
 
 # Create aerodynamic coefficient interface settings
 reference_area_drag = (4*0.3*0.1+2*0.1*0.1)/4  # Average projection area of a 3U CubeSat
@@ -189,20 +182,26 @@ acceleration_models = propagation_setup.create_acceleration_models(
 
 ### Define the initial state
 """
-The initial state of the vehicle that will be propagated is now defined. 
-
+The initial state of the vehicle that will be propagated is now defined.
 This initial state always has to be provided as a cartesian state, in the form of a list with the first three elements representing the initial position, and the three remaining elements representing the initial velocity.
-
 Within this example, we will retrieve the initial state of Delfi-C3 using its Two-Line-Elements (TLE) the date of its launch (April the 28th, 2008). The TLE strings are obtained from [space-track.org](https://www.space-track.org).
+
+The initial state of the vehicle is defined at a specific epoch.
+As TLEs are only valid close to their epoch, we will extract the epoch for the simulation start from the TLE element.
+The initial state will be propagated for one day, which we set relative to the initial epoch.
 """
 
 # Retrieve the initial state of Delfi-C3 using Two-Line-Elements (TLEs)
 delfi_tle = environment.Tle(
     "1 32789U 07021G   08119.60740078 -.00000054  00000-0  00000+0 0  9999",
-    "2 32789 098.0082 179.6267 0015321 307.2977 051.0656 14.81417433    68"
+    "2 32789 098.0082 179.6267 0015321 307.2977 051.0656 14.81417433    68",
 )
-delfi_ephemeris = environment.TleEphemeris( "Earth", "J2000", delfi_tle, False )
-initial_state = delfi_ephemeris.cartesian_state( simulation_start_epoch )
+delfi_ephemeris = environment.TleEphemeris("Earth", "J2000", delfi_tle, False)
+
+simulation_start_epoch = delfi_tle.get_epoch()
+simulation_end_epoch = simulation_start_epoch + 1 * constants.JULIAN_DAY
+
+initial_state = delfi_ephemeris.cartesian_state(simulation_start_epoch)
 
 
 ### Create the propagator settings
@@ -238,10 +237,10 @@ propagator_settings = propagation_setup.propagator.translational(
 ### Setup the variational equations
 """
 In addition to the state of the satellite, variation equations will also be propagated.
-A detailed explanation on variational equations is given in [tudatpy user guide](https://tudat-space.readthedocs.io/en/latest/_src_user_guide/state_propagation/running_variational_simulation.html).
+A detailed explanation on variational equations is given in the [user guide](https://docs.tudat.space/en/latest/_src_user_guide/state_propagation/propagating_variational_simulation.html).
 
 In this example, both the initial state transition matrix and the sensitivity matrix are to be propagated.
-The list of the available estimated parameters for the sensitivity matrix are also given in [tudatpy user guide](https://tudat-space.readthedocs.io/en/latest/_src_user_guide/state_propagation/sensitivity_analysis/available_parameters.html).
+The list of the available estimated parameters for the sensitivity matrix are also given in the [user guide](https://docs.tudat.space/en/latest/_src_user_guide/state_propagation/propagating_variational_equations/available_parameters.html).
 """
 
 # Setup parameters settings to propagate the state transition matrix
@@ -307,21 +306,21 @@ delta_initial_state_array = result2array(delta_initial_state_dict)
 delta_earth_standard_param_array = result2array(earth_standard_param_dict)
 delta_drag_coefficient_array = result2array(delta_drag_coeff_dict)
 
-# Extract the time, and convert it to hours
-time = delta_initial_state_array[:,0]
+# Extract the relative time, and convert it to hours
+time = delta_initial_state_array[:, 0] - delta_initial_state_array[0, 0]
 time_hours = time / 3600
 
 # Compute the deviation in position and velocity associated with the variation in initial state
 delta_r1 = np.linalg.norm(delta_initial_state_array[:, 1:4], axis=1)
-delta_v1 = np.linalg.norm(delta_initial_state_array[:, 4:8], axis=1)
+delta_v1 = np.linalg.norm(delta_initial_state_array[:, 4:7], axis=1)
 
 # Compute the deviation in position and velocity associated with the variation in Earth gravitational parameter
 delta_r2 = np.linalg.norm(delta_earth_standard_param_array[:, 1:4], axis=1)
-delta_v2 = np.linalg.norm(delta_earth_standard_param_array[:, 4:8], axis=1)
+delta_v2 = np.linalg.norm(delta_earth_standard_param_array[:, 4:7], axis=1)
 
 # Compute the deviation in position and velocity associated with the variation in drag coefficient
 delta_r3 = np.linalg.norm(delta_drag_coefficient_array[:, 1:4], axis=1)
-delta_v3 = np.linalg.norm(delta_drag_coefficient_array[:, 4:8], axis=1)
+delta_v3 = np.linalg.norm(delta_drag_coefficient_array[:, 4:7], axis=1)
 
 
 ### Plot the deviation in position
@@ -331,14 +330,18 @@ Make a plot of the deviation in position over time, in response to all parameter
 
 # Plot deviations of position
 plt.figure(figsize=(9, 5))
-plt.title('Trajectory deviation (position only) in response to indicated parameter variation')
+plt.title(
+    "Trajectory deviation (position only) in response to indicated parameter variation"
+)
 plt.grid()
-plt.plot(time_hours, delta_r1, color='tomato', label='variation initial state')
-plt.plot(time_hours, delta_r2, color='orange', label='variation grav. parameter (Earth)')
-plt.plot(time_hours, delta_r3, color='cyan', label='variation drag coefficient')
-plt.yscale('log')
-plt.xlabel('Time [hr]')
-plt.ylabel('$\Delta r$ [m]')
+plt.plot(time_hours, delta_r1, color="tomato", label="variation initial state")
+plt.plot(
+    time_hours, delta_r2, color="orange", label="variation grav. parameter (Earth)"
+)
+plt.plot(time_hours, delta_r3, color="cyan", label="variation drag coefficient")
+plt.yscale("log")
+plt.xlabel("Relative Time [hr]")
+plt.ylabel("$\Delta r$ [m]")
 plt.xlim([min(time_hours), max(time_hours)])
 plt.legend()
 plt.tight_layout()
@@ -352,14 +355,18 @@ Make a plot of the deviation in velocity over time, in response to all parameter
 
 # Plot deviations of speed
 plt.figure(figsize=(9, 5))
-plt.title('Trajectory deviation (velocity only) in response to indicated parameter variation.')
+plt.title(
+    "Trajectory deviation (velocity only) in response to indicated parameter variation."
+)
 plt.grid()
-plt.plot(time_hours, delta_v1, color='tomato', label='variation initial state')
-plt.plot(time_hours, delta_v2, color='orange', label='variation grav. parameter (Earth)')
-plt.plot(time_hours, delta_v3, color='cyan', label='variation drag coefficient')
-plt.yscale('log')
-plt.xlabel('Time [hr]')
-plt.ylabel('$\Delta v$ [m/s]')
+plt.plot(time_hours, delta_v1, color="tomato", label="variation initial state")
+plt.plot(
+    time_hours, delta_v2, color="orange", label="variation grav. parameter (Earth)"
+)
+plt.plot(time_hours, delta_v3, color="cyan", label="variation drag coefficient")
+plt.yscale("log")
+plt.xlabel("Relative Time [hr]")
+plt.ylabel("$\Delta v$ [m/s]")
 plt.xlim([min(time_hours), max(time_hours)])
 plt.legend()
 plt.tight_layout()
