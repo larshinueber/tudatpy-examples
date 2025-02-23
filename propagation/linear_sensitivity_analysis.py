@@ -6,7 +6,8 @@ This example is an extension of the Perturbed Satellite Orbit Application. It ad
 
 The script demonstrates how the basic numerical simulation setup (aiming to propagate the state of the system) can swiftly be extended to enable a study of the system's sensitivity.
 
-Via the `estimation_setup.parameter` module, the system parameters w.r.t. which the sensitivity is to be studied are defined and a `create_variational_equations_solver` function from the `numerical_simulation` module is used in order to setup and integrate the system's variational equations. After obtaining the state transition matrices from the integrated variational equations, the system's response to small perturbations can be tested via simple matrix multiplication.
+The system parameters w.r.t. which the sensitivity is to be studied are defined using the `estimation_setup.parameter` module.
+The `create_variational_equations_solver` function from the `numerical_simulation` module is then used to setup and integrate the system's variational equations. After obtaining the state transition matrices from the integrated variational equations, the system's response to small perturbations can be tested via simple matrix multiplication.
 
 The availability of variational equations in tudat enables many more, advanced functionalities, such as covariance analysis and precise orbit determination.
 """
@@ -73,9 +74,7 @@ body_settings = environment_setup.get_default_body_settings(
 ### Create the vehicle and its environment interface
 Let's now create the satellite for which an orbit will be simulated.
 
-This satellite is setup to have mass of 2.2 kg, a reference area (used both for aerodynamic and radiation pressure) of 4m$^2$, a radiation pressure coefficient of 1.2, and a drag coefficient also of 1.2.
-
-When setting up the radiation pressure interface, the Earth is set as a body that can occult the radiation emitted by the Sun.
+For more information on how the settings are defined, take a look at the [Perturbed satellite orbit example](perturbed_satellite_orbit.ipynb).
 """
 
 
@@ -182,29 +181,16 @@ acceleration_models = propagation_setup.create_acceleration_models(
 
 
 """
-### Define simulation start and end epoch
+### Define simulation epoch and initial state
 
-Next, the start and end simulation epochs are specified.
-In Tudat, all epochs are defined as seconds since J2000.
-For ease of use, the start and end epochs are derived from calender dates using the `DateTime` class.
-Please refer to the [API documentation](https://py.api.tudat.space/en/latest/time_conversion.html) of the `time_conversion` module for more information on this.
+Next, the start and end simulation epochs as well as the initial state are specified.
+For more extensive information take a look at the [Perturbed Satellite orbit example](perturbed_satellite_orbit.ipynb).
 """
 
 
 # Set simulation start and end epochs
 simulation_start_epoch = DateTime(2008, 4, 28).epoch()
 simulation_end_epoch   = DateTime(2008, 4, 29).epoch()
-
-
-"""
-### Define the initial state
-The initial state of the vehicle that will be propagated is now defined. 
-
-This initial state always has to be provided as a cartesian state, in the form of a list with the first three elements representing the initial position, and the three remaining elements representing the initial velocity.
-
-Within this example, we will retrieve the initial state of Delfi-C3 using its Two-Line-Elements (TLE) the date of its launch (April the 28th, 2008). The TLE strings are obtained from [space-track.org](https://www.space-track.org).
-"""
-
 
 # Retrieve the initial state of Delfi-C3 using Two-Line-Elements (TLEs)
 delfi_tle = environment.Tle(
@@ -252,8 +238,13 @@ propagator_settings = propagation_setup.propagator.translational(
 In addition to the state of the satellite, variation equations will also be propagated.
 A detailed explanation on variational equations is given in [tudatpy user guide](https://docs.tudat.space/en/latest/_src_user_guide/state_propagation/propagating_variational_simulation.html).
 
-In this example, both the initial state transition matrix and the sensitivity matrix are to be propagated.
-The list of the available estimated parameters for the sensitivity matrix are also given in [tudatpy user guide](https://docs.tudat.space/en/latest/_src_user_guide/state_propagation/propagating_variational_equations/available_parameters.html).
+In this example, the following parameters are to be studied:
+
+- Delfi-C3's initial state
+- Earth's gravitational parameter 
+- Delfi-C3's drag coefficient
+
+The list of the available estimated parameters for the sensitivity matrix are also given in [tudatpy user guide](https://docs.tudat.space/en/latest/_src_user_guide/state_propagation/propagating_variational_equations/available_parameters.html) or the [API reference](https://py.api.tudat.space/en/latest/parameter.html).
 """
 
 
@@ -323,8 +314,8 @@ delta_initial_state_array = result2array(delta_initial_state_dict)
 delta_earth_standard_param_array = result2array(earth_standard_param_dict)
 delta_drag_coefficient_array = result2array(delta_drag_coeff_dict)
 
-# Extract the time, and convert it to hours
-time = delta_initial_state_array[:,0]
+# Extract the epoch in seconds, and convert it to hours
+time = delta_initial_state_array[:, 0] - delta_initial_state_array[0, 0]
 time_hours = time / 3600
 
 # Compute the deviation in position and velocity associated with the variation in initial state
@@ -354,7 +345,7 @@ plt.plot(time_hours, delta_r1, color='tomato', label='variation initial state')
 plt.plot(time_hours, delta_r2, color='orange', label='variation grav. parameter (Earth)')
 plt.plot(time_hours, delta_r3, color='cyan', label='variation drag coefficient')
 plt.yscale('log')
-plt.xlabel('Time [hr]')
+plt.xlabel('Relative Time [hr]')
 plt.ylabel('$\Delta r$ [m]')
 plt.xlim([min(time_hours), max(time_hours)])
 plt.legend()
@@ -376,7 +367,7 @@ plt.plot(time_hours, delta_v1, color='tomato', label='variation initial state')
 plt.plot(time_hours, delta_v2, color='orange', label='variation grav. parameter (Earth)')
 plt.plot(time_hours, delta_v3, color='cyan', label='variation drag coefficient')
 plt.yscale('log')
-plt.xlabel('Time [hr]')
+plt.xlabel('Relative Time [hr]')
 plt.ylabel('$\Delta v$ [m/s]')
 plt.xlim([min(time_hours), max(time_hours)])
 plt.legend()
